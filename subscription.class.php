@@ -37,4 +37,81 @@ final class PC_plugin_subscription extends PC_base {
 		$r->execute(Array($site));
 		return $r->fetchAll();
 	}
+	private function _markup_styles_inliner($m) {
+		global $stylesheet;
+		if (isset($stylesheet[$m[2].'.'.$m[4]])) {
+			return $m[1].'style="'.$stylesheet[$m[2].'.'.$m[4]].'"'.$m[5];
+		}
+		elseif (isset($stylesheet['.'.$m[4]])) {
+			return $m[1].'style="'.$stylesheet['.'.$m[4]].'"'.$m[5];
+		}
+		return $m[0];
+	}
+	private function _markup_links_fixer($m) {
+		if (preg_match("#http://#i", $m[2])) return $m[0];
+		return $m[1]."=\"".$this->cfg['url']['base'].$m[2].'"';
+	}
+	public function Get_markup($pageId=null, $text='', $inline_styles=false) {
+		if (!$this->site->Is_loaded()) {
+			$pageId = null;
+			$text = 'Site data is not accessible (site is not loaded).';
+		}
+		$p = array();
+		if (!is_null($pageId)) {
+			$styles = file_get_contents($this->cfg['path']['base'].$this->site->Get_theme_path().'custom.css');
+			$p = $this->page->Get_page($pageId);
+			if (!$p) {
+				$pageId = null;
+				$text = 'Page count not be loaded (invalid page id?).';
+			}
+			else $text = $p['text'];
+		}
+		$tpl = $this->core->Get_path('themes').'pc_subscription.tpl.php';
+		if (!is_file($tpl)) {
+			$markup = '<html><head>'
+			.'<style type="text/css">body{background:'.$this->site->data['editor_background'].'}'.(!empty($styles)?$styles:'').'</style>'
+			.'</head><body style="margin:0;padding:0;"><div style="width:'.$this->site->data['editor_width'].'px">';
+			$markup .= $text;
+			$markup .= '</div></body></html>';
+		}
+		else {
+			$p['text'] = $text;
+			$this->site->Register_data('pc_subscription/page', $p);
+			ob_start();
+			require($tpl);
+			$markup = ob_get_clean();
+		}
+		$markup = preg_replace_callback("#(src|href)=\"([^\"]+?)\"#i", array($this, '_markup_links_fixer'), $markup);
+		if ($inline_styles) {
+			require($this->cfg['path']['classes']."CSSParser.php");
+			$sheet = new CSSParser($styles);
+			$parsed = $sheet->parse();
+			$sheet_selectors = $parsed->getAllSelectors();
+			$sheet_rules = $parsed->getAllRuleSets();
+			
+			global $stylesheet;
+			$stylesheet = array();
+			for ($a=0; isset($sheet_selectors[$a]); $a++) {
+				$selector = $sheet_selectors[$a]->getSelector();
+				$selector = explode('.', $selector[0]);
+				$class = $selector[1];
+				$class_parts = explode(' ', $class);
+				$locked = false;
+				if (in_array(v($class_parts[1]), array('tr', 'td'))) {
+					$tag = $class_parts[1];
+					$locked = true;
+				}
+				else $tag = $selector[0];
+				
+				$rules = $sheet_rules[$a]->getRules();
+				$style = '';
+				foreach ($rules as &$rule) {
+					$style .= $rule->__toString();
+				}
+				$stylesheet[$tag.'.'.$class] = $style;
+			}
+			$markup = preg_replace_callback("#(<([a-z0-9]+)\s+[^>]*?)(class=\"([^>]+?)\")([^>]*?>)#i", array($this, '_markup_styles_inliner'), $markup);
+		}
+		return $markup;
+	}
 }

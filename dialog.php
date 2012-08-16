@@ -21,63 +21,6 @@ $cfg['core']['no_login_form'] = true;
 require_once '../../admin/admin.php';
 
 $items_per_page = 30;
-
-function pc_subscription_preg_callback($m) {
-	global $stylesheet;
-	if (isset($stylesheet[$m[2].'.'.$m[4]])) {
-		return $m[1].'style="'.$stylesheet[$m[2].'.'.$m[4]].'"'.$m[5];
-	}
-	elseif (isset($stylesheet['.'.$m[4]])) {
-		return $m[1].'style="'.$stylesheet['.'.$m[4]].'"'.$m[5];
-	}
-	return $m[0];
-}
-function PC_subscription_generate_markup($pid=null, $text='', $inline_styles=false){
-	global $cfg, $site, $page, $db;
-	if (!empty($pid)) $styles = file_get_contents($cfg['path']['base'].$site->Get_theme_path().'custom.css');
-	
-	$markup = '<html><head>'
-	.'<style type="text/css">body{background:'.$site->data['editor_background'].'}'.(!empty($styles)?$styles:'').'</style>'
-	.'</head><body style="margin:0;padding:0;"><div style="width:'.$site->data['editor_width'].'px">';
-	if (!empty($pid)) {
-		$p = $page->Get_page($pid);
-		if (!$p) return false;
-		$markup .= preg_replace("#(src|href)=\"([^\"]+?)\"#i", "$1=\"".$cfg['url']['base']."$2\"", $p['text']);
-	}
-	$markup .= $text;
-	//$markup .= '</div></body></html>';
-	if ($inline_styles) {
-		require($cfg['path']['classes']."CSSParser.php");
-		$sheet = new CSSParser($styles);
-		$parsed = $sheet->parse();
-		$sheet_selectors = $parsed->getAllSelectors();
-		$sheet_rules = $parsed->getAllRuleSets();
-		
-		global $stylesheet;
-		$stylesheet = array();
-		for ($a=0; isset($sheet_selectors[$a]); $a++) {
-			$selector = $sheet_selectors[$a]->getSelector();
-			$selector = explode('.', $selector[0]);
-			$class = $selector[1];
-			$class_parts = explode(' ', $class);
-			$locked = false;
-			if (in_array(v($class_parts[1]), array('tr', 'td'))) {
-				$tag = $class_parts[1];
-				$locked = true;
-			}
-			else $tag = $selector[0];
-			
-			$rules = $sheet_rules[$a]->getRules();
-			$style = '';
-			foreach ($rules as &$rule) {
-				$style .= $rule->__toString();
-			}
-			$stylesheet[$tag.'.'.$class] = $style;
-		}
-		$markup = preg_replace_callback("#(<([a-z0-9]+)\s+[^>]*?)(class=\"([^>]+?)\")([^>]*?>)#i", 'pc_subscription_preg_callback', $markup);
-	}
-	return $markup;
-}
 function PC_subscription_get_recipients($to) {
 	$recipients = array();
 	$tmp = preg_split("#\s*(\n|,)\s*#", $to);
@@ -201,22 +144,29 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			}
 			break;
 		case 'show_preview':
+			$subscription = $core->Get_object('PC_plugin_subscription');
 			if (isset($_GET['action'], $_GET['ln'], $_GET['site'])) {
 				$site->Load($_GET['site']);
 				$site->Set_language($_GET['ln']);
 				if (v($_GET['pid'])) {
 					if (ctype_digit($_GET['pid'])) {
-						$markup = PC_subscription_generate_markup($_GET['pid']);
+						$markup = $subscription->Get_markup($_GET['pid']);
 						if ($markup) {
 							echo $markup;
 						}
 						else echo 'Cannot generate markup';
 					}
-					else echo PC_subscription_generate_markup(null, '<center>Preview</center>');
+					else {
+						echo $subscription->Get_markup(null, '<center>Preview</center>');
+					}
 				}
-				else echo PC_subscription_generate_markup(null, '<center>Preview</center>');
+				else {
+					echo $subscription->Get_markup(null, '<center>Preview</center>');
+				}
 			}
-			else echo PC_subscription_generate_markup(null, '<center>Preview</center>');
+			else {
+				echo $subscription->Get_markup(null, '<center>Preview</center>');
+			}
 			$dont_send_json = true;
 			break;
 		case 'send':
@@ -248,7 +198,8 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 				if (isset($_POST['ln'], $_POST['site'])) {
 					$site->Load($site_id);
 					$site->Set_language($_POST['ln']);
-					$markup = PC_subscription_generate_markup($pid, '', true);
+					$subscription = $core->Get_object('PC_plugin_subscription');
+					$markup = $subscription->Get_markup($pid, '', true);
 					
 					$sbscr_route = 'rassylka-novostej';
 					$ids = $page->Get_by_controller('pc_subscription');
@@ -266,10 +217,15 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 						foreach ($recipients as $recipient) {
 							if ($to == 'all') {
 								$recip_email = $recipient['email'];
-								$markup2 = $markup.'</div><a target="blank" href="'.$recipient['domain'].$sbscr_route.'/'.$recipient['hash'].'/">'.lang('subscription_unsubscribe').'</a></body></html>';
+								//$markup2 = str_replace("</body>", '<a target="blank" href="'.$recipient['domain'].$sbscr_route.'/'.$recipient['hash'].'/">'.lang('subscription_unsubscribe').'</a></body>', $markup);
 							}
 							else $recip_email = $recipient;
-							if (!isset($markup2)) $markup2 = $markup.'</div></body></html>';
+							if (is_array($recipient) && isset($recipient['hash'])) {
+								$unsubscribe_link = (isset($recipient['domain'])?$recipient['domain']:$cfg['url']['base']);
+								$unsubscribe_link .= 'api/plugin/pc_subscription/unsubscribe/'.$recipient['hash'];
+								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
+							}
+							else $markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_]+?)#/ui", '$1', $markup);
 							$s = mail($recip_email, $subject, $markup2, $headers);
 							$out['markup'] = $markup;
 							if ($s) $out['success'] = true;
@@ -296,7 +252,7 @@ $plugin_url = $cfg['url']['base'].$cfg['directories']['plugins'].'/'.$plugin_nam
 $plugin_file = $plugin_url.basename(__FILE__);
 ?>
 <script type="text/javascript">
-ProfisCMS.utils.localize('mod.pc_subscription', {
+PC.utils.localize('mod.pc_subscription', {
 	en: {
 		add: 'Add',
 		title: 'Subscription',
@@ -371,27 +327,27 @@ ProfisCMS.utils.localize('mod.pc_subscription', {
     }
 });
 
-Ext.namespace('ProfisCMS.plugins');
+Ext.namespace('PC.plugins');
 
 var items_per_page = '<?php echo $items_per_page; ?>';
 var plugin_file = '<?php echo $plugin_file; ?>';
 
 function mod_subscription_click() {
-	ProfisCMS.plugins.subscription.dialog = {};
-	var dialog = ProfisCMS.plugins.subscription.dialog;
-	var ln = ProfisCMS.i18n.mod.pc_subscription;
+	PC.plugin.subscription.dialog = {};
+	var dialog = PC.plugin.subscription.dialog;
+	var ln = PC.i18n.mod.pc_subscription;
 	dialog.ln = ln;
 	
 	dialog.Get_preview_link = function(site, pid, ln) {
 		if (site == undefined) {
 			if (dialog.window != undefined) site = dialog.window._f._site._id.getValue();
-			else site = ProfisCMS.global.site;
+			else site = PC.global.site;
 		}
-		if (ln == undefined) ln = ProfisCMS.global.ln;
+		if (ln == undefined) ln = PC.global.ln;
 		return plugin_file +'?ajax=1&action=show_preview&ln='+ln+'&site='+site+'&pid='+ pid;
 	}
 	dialog.Generate_preview = function(ln){
-		if (ln==undefined) ln = ProfisCMS.global.ln;
+		if (ln==undefined) ln = PC.global.ln;
 		var value = dialog.window._f._pid.getValue();
 		if (value.length) {
 			Ext.get('pc_subscription_preview_frame').dom.src = dialog.Get_preview_link(null, value, ln);
@@ -411,7 +367,7 @@ function mod_subscription_click() {
 			{	ref: '_site',
 				xtype: 'fieldset',
 				labelWidth: 100,
-				value: ProfisCMS.global.site,
+				value: PC.global.site,
 				style: {
 					padding: '10px 5px 10px 0',
 					margin: '0 0 5px 0',
@@ -421,9 +377,9 @@ function mod_subscription_click() {
 					anchor: '100%'
 				},
 				items: [
-					new ProfisCMS.SiteCombo({
+					new PC.ux.SiteCombo({
 						ref: '_id',
-						value: ProfisCMS.global.site,
+						value: PC.global.site,
 						listeners: {
 							beforeselect: function(cmbbox, rec, ndx) {
 								dialog.Generate_preview();
@@ -526,7 +482,7 @@ function mod_subscription_click() {
 														}
 														//Ext.Msg.hide();
 														Ext.MessageBox.show({
-															title: ProfisCMS.i18n.error,
+															title: PC.i18n.error,
 															msg: ln.add_error,
 															buttons: Ext.MessageBox.OK,
 															icon: Ext.MessageBox.ERROR
@@ -591,7 +547,7 @@ function mod_subscription_click() {
 																}
 																else var error = 'Connection error.';
 																Ext.MessageBox.show({
-																	title: ProfisCMS.i18n.error,
+																	title: PC.i18n.error,
 																	msg: (error?'<b>'+ error +'</b><br />':'') +'Subscriber was not added.',
 																	buttons: Ext.MessageBox.OK,
 																	icon: Ext.MessageBox.ERROR
@@ -626,15 +582,15 @@ function mod_subscription_click() {
 										icon: 'images/delete.png',
 										handler: function() {
 											Ext.MessageBox.show({
-												title: ProfisCMS.i18n.msg.title.confirm,
+												title: PC.i18n.msg.title.confirm,
 												msg: ln.confirm_send,
 												buttons: Ext.MessageBox.YESNO,
 												icon: Ext.MessageBox.QUESTION,
 												fn: function(r) {
 													if (r == 'yes') {
 														Ext.MessageBox.show({
-															title: ProfisCMS.i18n.msg.title.loading,
-															msg: ProfisCMS.i18n.msg.loading,
+															title: PC.i18n.msg.title.loading,
+															msg: PC.i18n.msg.loading,
 															width: 300,
 															wait: true,
 															waitConfig: {interval:100}
@@ -671,7 +627,7 @@ function mod_subscription_click() {
 																	var error = 'Connection error.';
 																}
 																Ext.MessageBox.show({
-																	title: ProfisCMS.i18n.error,
+																	title: PC.i18n.error,
 																	msg: (error?'<b>'+ error +'</b><br />':'') +'Subscribers was not deleted.',
 																	buttons: Ext.MessageBox.OK,
 																	icon: Ext.MessageBox.ERROR
@@ -684,8 +640,8 @@ function mod_subscription_click() {
 										}
 									},
 									{xtype:'tbfill'},
-									{xtype:'tbtext', text: ProfisCMS.i18n.site},
-									new ProfisCMS.SiteCombo({
+									{xtype:'tbtext', text: PC.i18n.site},
+									new PC.ux.SiteCombo({
 										ref: '../_site',
 										width: 180,
 										value: site_id,
@@ -801,7 +757,7 @@ function mod_subscription_click() {
 			},
 			{	ref: '_from',
 				fieldLabel: ln.sender,
-				value: ProfisCMS.global.admin
+				value: PC.global.admin
 			},
 			{	ref: '_from_email',
 				fieldLabel: ln.sender_email
@@ -882,7 +838,7 @@ function mod_subscription_click() {
 					var params = {
 						api: true,
 						site: dialog.window._f._site._id.getValue(),
-						ln: ProfisCMS.global.ln,
+						ln: PC.global.ln,
 						subject: dialog.window._f._subject.getValue(),
 						from: dialog.window._f._from.getValue(),
 						from_email: dialog.window._f._from_email.getValue(),
@@ -890,15 +846,15 @@ function mod_subscription_click() {
 						to: (dialog.window._f._to._type.getValue()=='custom'?dialog.window._f._to._custom.getValue():'all')
 					};
 					Ext.MessageBox.show({
-						title: ProfisCMS.i18n.msg.title.confirm,
+						title: PC.i18n.msg.title.confirm,
 						msg: ln.confirm_send,
 						buttons: Ext.MessageBox.YESNO,
 						icon: Ext.MessageBox.QUESTION,
 						fn: function(r) {
 							if (r == 'yes') {
 								Ext.MessageBox.show({
-									title: ProfisCMS.i18n.msg.title.loading,
-									msg: ProfisCMS.i18n.msg.loading,
+									title: PC.i18n.msg.title.loading,
+									msg: PC.i18n.msg.loading,
 									width: 300,
 									wait: true,
 									waitConfig: {interval:100}
@@ -930,7 +886,7 @@ function mod_subscription_click() {
 										}
 										//Ext.Msg.hide();
 										Ext.MessageBox.show({
-											title: ProfisCMS.i18n.error,
+											title: PC.i18n.error,
 											msg: ln.sending_error,
 											buttons: Ext.MessageBox.OK,
 											icon: Ext.MessageBox.ERROR
@@ -942,7 +898,7 @@ function mod_subscription_click() {
 					});
 				}
 			},
-			{	text: ProfisCMS.i18n.close,
+			{	text: PC.i18n.close,
 				handler: function() {
 					dialog.window.close();
 				}
@@ -969,8 +925,8 @@ function mod_subscription_click() {
 	dialog.window.show();
 }
 
-ProfisCMS.plugins.subscription = {
-	name: ProfisCMS.i18n.mod.pc_subscription.title,
+PC.plugin.subscription = {
+	name: PC.i18n.mod.pc_subscription.title,
 	onclick: mod_subscription_click,
 	icon: <?php echo json_encode(get_plugin_icon()) ?>,
 	priority: <?php echo $mod['priority'] ?>
