@@ -60,22 +60,36 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			$sid = v($_POST['site']);
 			$list = PC_subscription_get_recipients(v($_POST['list']));
 			if (!count($list)) $out['error'] = 'No recipients were found';
-			$values = array();
-			$params = array();
-			$values = substr(str_repeat('(?,?,?,?,?),', count($list)), 0 , -1);
-			foreach ($list as $email) {
-				$params[] = $sid;
-				$params[] = $email;
-				$params[] = time();
-				$params[] = md5($email.$cfg['salt']);
-				$params[] = $cfg['url']['base'];
+			$r = $db->prepare("SELECT email FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=?");
+			$s = $r->execute(array($sid));
+			if ($s) {
+				while ($email = $r->fetchColumn()) {
+					if (in_array($email, $list)) {
+						$rs = array_search($email, $list);
+						if ($rs !== false) unset($list[$rs]);
+					}
+				}
 			}
-			$r = $db->prepare("INSERT INTO {$cfg['db']['prefix']}plugin_pc_subscription VALUES ".$values);
-			$s = $r->execute($params);
-			if (!$s) $out['error'] = 'Database error';
-			else {
-				$out['success'] = true;
+			if (count($list)) {
+				//$list = array_values($list);
+				$values = array();
+				$params = array();
+				$values = substr(str_repeat('(?,?,?,?,?),', count($list)), 0 , -1);
+				foreach ($list as $email) {
+					$params[] = $sid;
+					$params[] = $email;
+					$params[] = time();
+					$params[] = md5($email.$cfg['salt']);
+					$params[] = $cfg['url']['base'];
+				}
+				$r = $db->prepare("INSERT INTO {$cfg['db']['prefix']}plugin_pc_subscription VALUES ".$values);
+				$s = $r->execute($params);
+				if (!$s) $out['error'] = 'Database error';
+				else {
+					$out['success'] = true;
+				}
 			}
+			else $out['success'] = true;
 			break;
 		case 'get_subscribers':
 			if (!isset($_GET['action'], $_POST['site'])) break;
