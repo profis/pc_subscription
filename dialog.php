@@ -58,10 +58,11 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			break;
 		case 'add_subscribers':
 			$sid = v($_POST['site']);
+			$ln = v($_POST['ln']);
 			$list = PC_subscription_get_recipients(v($_POST['list']));
 			if (!count($list)) $out['error'] = 'No recipients were found';
-			$r = $db->prepare("SELECT email FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=?");
-			$s = $r->execute(array($sid));
+			$r = $db->prepare("SELECT email FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=? and ln=?");
+			$s = $r->execute(array($sid, $ln));
 			if ($s) {
 				while ($email = $r->fetchColumn()) {
 					if (in_array($email, $list)) {
@@ -74,9 +75,10 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 				//$list = array_values($list);
 				$values = array();
 				$params = array();
-				$values = substr(str_repeat('(?,?,?,?,?),', count($list)), 0 , -1);
+				$values = substr(str_repeat('(?,?,?,?,?,?),', count($list)), 0 , -1);
 				foreach ($list as $email) {
 					$params[] = $sid;
+					$params[] = $ln;
 					$params[] = $email;
 					$params[] = time();
 					$params[] = md5($email.$cfg['salt']);
@@ -102,6 +104,7 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			$date_to = v($_POST['date_to']);
 			$search_phrase = v($_POST['search_phrase']);
 			$site_id = v($_POST['site']);
+			$ln = v($_POST['ln']);
 			if (!ctype_digit($site_id)) $site_id = 0; //all sites
 			//---
 			$where = array();
@@ -131,6 +134,8 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 				$where[] = 'site=?';
 				$parameters[] = $site_id;
 			}
+			$where[] = 'ln=?';
+			$parameters[] = $ln;
 			//---
 			//get sorted&paged subscribers
 			$r_subscribers = $db->prepare("SELECT *"
@@ -190,13 +195,14 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			$pid = v($_POST['pid']);
 			$to = v($_POST['to']);
 			$site_id = v($_POST['site']);
+			$ln = v($_POST['ln']);
 			if (!Validate('email', $from_email)) $out['errors']['from_email'] = true;
 			if (!ctype_digit($pid)) $out['errors']['pid'] = true;
 			//get recipients
 			$recipients = array();
 			if ($to == 'all') {
-				$r = $db->prepare("SELECT email,hash,domain FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=?");
-				$s = $r->execute(array($site_id));
+				$r = $db->prepare("SELECT email,hash,domain FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=? AND ln=?");
+				$s = $r->execute(array($site_id, $ln));
 				if ($s) {
 					while ($recipient = $r->fetch()) {
 						$recipients[] = $recipient;
@@ -211,7 +217,7 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			if (!count(v($out['errors']))) {
 				if (isset($_POST['ln'], $_POST['site'])) {
 					$site->Load($site_id);
-					$site->Set_language($_POST['ln']);
+					$site->Set_language($ln);
 					$subscription = $core->Get_object('PC_plugin_subscription');
 					$markup = $subscription->Get_markup($pid, '', true);
 					
@@ -236,10 +242,11 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 							else $recip_email = $recipient;
 							if (is_array($recipient) && isset($recipient['hash'])) {
 								$unsubscribe_link = (isset($recipient['domain'])?$recipient['domain']:$cfg['url']['base']);
-								$unsubscribe_link .= 'api/plugin/pc_subscription/unsubscribe/'.$recipient['hash'];
-								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
+								$unsubscribe_link .= $ln . '/api/plugin/pc_subscription/unsubscribe/'.$recipient['hash'].'/' . $site_id;
+								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_\s]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
 							}
 							else $markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_]+?)#/ui", '$1', $markup);
+							PC_utils::debugEmail($recip_email, $markup2);
 							$s = mail($recip_email, $subject, $markup2, $headers);
 							$out['markup'] = $markup;
 							if ($s) $out['success'] = true;
@@ -343,7 +350,7 @@ PC.utils.localize('mod.pc_subscription', {
 
 Ext.namespace('PC.plugins');
 
-var items_per_page = '<?php echo $items_per_page; ?>';
+var items_per_page = <?php echo $items_per_page; ?>;
 var plugin_file = '<?php echo $plugin_file; ?>';
 
 function mod_subscription_click() {
@@ -353,19 +360,34 @@ function mod_subscription_click() {
 	dialog.ln = ln;
 	
 	dialog.Get_preview_link = function(site, pid, ln) {
+		debugger;
 		if (site == undefined) {
-			if (dialog.window != undefined) site = dialog.window._f._site._id.getValue();
+			if (dialog.window != undefined) {
+				var site_and_ln = dialog.window._f._site._id.getValue();
+				site_and_ln = site_and_ln.split('_');
+				var site = site_and_ln[0];
+				var ln = site_and_ln[1];
+			}
 			else site = PC.global.site;
 		}
 		if (ln == undefined) ln = PC.global.ln;
 		return plugin_file +'?ajax=1&action=show_preview&ln='+ln+'&site='+site+'&pid='+ pid;
 	}
-	dialog.Generate_preview = function(ln){
+	dialog.Generate_preview = function(ln, forced){
 		if (ln==undefined) ln = PC.global.ln;
 		var value = dialog.window._f._pid.getValue();
-		if (value.length) {
+		if (value.length || forced) {
 			Ext.get('pc_subscription_preview_frame').dom.src = dialog.Get_preview_link(null, value, ln);
 		}
+	}
+	dialog.Get_site_ln_combo_object = function() {
+		var o = {};
+		Ext.iterate(PC.global.SITES, function(site){
+			Ext.iterate(site[3], function(lang_data){
+				 o[site[0] + '_' + lang_data[0]] = site[1] + ' - ' + lang_data[0];
+			});
+		});
+		return o;
 	}
 	dialog.form = {
 		ref: '_f',
@@ -380,7 +402,7 @@ function mod_subscription_click() {
 		items: [
 			{	ref: '_site',
 				xtype: 'fieldset',
-				labelWidth: 100,
+				//labelWidth: 100,
 				value: PC.global.site,
 				style: {
 					padding: '10px 5px 10px 0',
@@ -391,6 +413,35 @@ function mod_subscription_click() {
 					anchor: '100%'
 				},
 				items: [
+					{
+						ref: '_id',
+						value: PC.global.site + '_' + PC.global.ln,
+						xtype: 'combo',
+						mode: 'local',
+						store: {
+							xtype: 'arraystore',
+							fields: ['id', 'label'],
+							idIndex: 0,
+							data: PC.utils.getComboArrayFromObject(dialog.Get_site_ln_combo_object())
+						},
+						displayField: 'id',
+						valueField: 'label',
+						editable: false,
+						forceSelection: true,
+						triggerAction: 'all',
+						
+						listeners: {
+							beforeselect: function(cmbbox, rec, ndx) {
+								dialog.window._f._pid.setValue('');
+								
+							},
+							select: function() {
+								dialog.Generate_preview(undefined, true);
+							}
+							
+						}
+					},
+					/*
 					new PC.ux.SiteCombo({
 						ref: '_id',
 						value: PC.global.site,
@@ -400,6 +451,7 @@ function mod_subscription_click() {
 							}
 						}
 					}),
+					*/
 					{	ref: '_manage_subscribers',
 						xtype: 'button',
 						fieldLabel: '&nbsp;',
@@ -407,11 +459,15 @@ function mod_subscription_click() {
 						text: ln.manage_subscribers,
 						icon: 'images/edit.gif',
 						handler: function() {
-							var site_id = dialog.window._f._site._id.getValue();
+							var site_and_ln = dialog.window._f._site._id.getValue();
+							site_and_ln = site_and_ln.split('_');
+							var site_id = site_and_ln[0];
+							var lang = site_and_ln[1];
 							if (dialog.subscribers != undefined) {
 								dialog.subscribers.store.baseParams.site = site_id;
+								dialog.subscribers.store.baseParams.ln = lang;
 								dialog.subscribers.grid._site.setValue(site_id);
-								dialog.subscribers.grid._site.afterSelect(site_id);
+								dialog.subscribers.grid._site.afterSelect(site_id, lang);
 								dialog.subscribers.window.show();
 								return;
 							}
@@ -425,7 +481,9 @@ function mod_subscription_click() {
 								fields: ['site', 'email', 'date'],
 								baseParams: {
 									api: true,
-									site: site_id
+									site: site_id,
+									ln: lang,
+									limit: items_per_page
 								},
 								totalProperty: 'total',
 								root: 'subscribers',
@@ -446,7 +504,7 @@ function mod_subscription_click() {
 								}
 							});
 							subscribers.add_subscriber = function(){
-								var window = new Ext.Window({
+								var window = new PC.ux.Window({
 									title: ln.add_subscribers,
 									width: 400, height: 200,
 									layout: 'form',
@@ -475,6 +533,7 @@ function mod_subscription_click() {
 													params: {
 														api: true,
 														site: subscribers.grid._site.getValue(),
+														ln: subscribers.store.baseParams.ln,
 														list: list
 													},
 													method: 'POST',
@@ -510,7 +569,16 @@ function mod_subscription_click() {
 								});
 								window.show();
 							};
+							var paging_toolbar = new Ext.PagingToolbar({
+								ref: '../_paging',
+								store: subscribers.store,
+								displayInfo: true,
+								pageSize: items_per_page,
+								prependButtons: true
+							});
+							subscribers.store._paging = paging_toolbar;
 							subscribers.grid = new Ext.grid.GridPanel({
+								_paging: paging_toolbar,
 								region: 'center',
 								border: false,
 								store: subscribers.store,
@@ -654,9 +722,10 @@ function mod_subscription_click() {
 										}
 									},
 									{xtype:'tbfill'},
-									{xtype:'tbtext', text: PC.i18n.site},
+									{xtype:'tbtext', hidden: true, text: PC.i18n.site},
 									new PC.ux.SiteCombo({
 										ref: '../_site',
+										hidden: true,
 										width: 180,
 										value: site_id,
 										listeners: {
@@ -664,12 +733,22 @@ function mod_subscription_click() {
 												cmbbox.afterSelect(rec.get('id'));
 											}
 										},
-										afterSelect: function(id){
-											subscribers.store.baseParams.site = id;
+										afterSelect: function(id, ln){
+									
+											//debugger;
+											subscribers.store._paging.changePage(1);
+											subscribers.store.setBaseParam('site', id);
+											subscribers.store.setBaseParam('ln', ln);
+											subscribers.store.setBaseParam('start', 0);
 											subscribers.store.reload();
+													
+											//subscribers.store.reload({
+											//	page: 1,
+											//	start: 0
+											//});
 											//if (dialog.Initial_site_value == rec.get('id')) return;
 										}
-									})/*,
+									})/**//*,
 									{xtype:'tbtext', text: 'Show from:'},
 									{	ref: '../date_from',
 										xtype:'datefield',
@@ -745,14 +824,9 @@ function mod_subscription_click() {
 										}
 									}*/
 								],
-								bbar: new Ext.PagingToolbar({
-									store: subscribers.store,
-									displayInfo: true,
-									pageSize: items_per_page,
-									prependButtons: true
-								})
+								bbar: paging_toolbar
 							});
-							subscribers.window = new Ext.Window({
+							subscribers.window = new PC.ux.Window({
 								title: ln.manage_subscribers,
 								width: 420, height: 400,
 								layout: 'border',
@@ -782,11 +856,24 @@ function mod_subscription_click() {
 				selectOnFocus: true,
 				triggerClass: 'x-form-folder-trigger',
 				onTriggerClick: function() {
+					var site_and_ln = dialog.window._f._site._id.getValue();
+					site_and_ln = site_and_ln.split('_');
+					var site = site_and_ln[0];
+					var lang = site_and_ln[1];
 					var field = this;
 					Show_redirect_page_window(function(value, ln){
 						field.setValue(value);
 						dialog.Generate_preview(ln);
-					}, undefined, this.getValue(), dialog.window._f._site._id.getValue());
+					}, {
+						select_node_path:this.getValue(), 
+						init_value: dialog.window._f._site._id.getValue().split('_')[0],
+						disable_ln_combo: true,
+						site: site,
+						ln: lang,
+						tree_config: {
+							ln: lang
+						}
+					});
 				},
 				listeners: {
 					change: function(field, value, ovalue) {
@@ -849,10 +936,14 @@ function mod_subscription_click() {
 				icon: '<?php echo $plugin_url.$plugin_name; ?>.png',
 				ref: '_send',
 				handler: function(b, e) {
+					var site_and_ln = dialog.window._f._site._id.getValue();
+					site_and_ln = site_and_ln.split('_');
+					var site = site_and_ln[0];
+					var lang = site_and_ln[1];
 					var params = {
 						api: true,
-						site: dialog.window._f._site._id.getValue(),
-						ln: PC.global.ln,
+						site: site,
+						ln: lang,
 						subject: dialog.window._f._subject.getValue(),
 						from: dialog.window._f._from.getValue(),
 						from_email: dialog.window._f._from_email.getValue(),
@@ -924,7 +1015,7 @@ function mod_subscription_click() {
 		width: 630,
 		html: '<iframe frameborder="0" id="pc_subscription_preview_frame" width="100%" height="100%" src="'+ dialog.Get_preview_link() +'"></iframe>'
 	};
-	dialog.window = new Ext.Window({
+	dialog.window = new PC.ux.Window({
 		modal: true,
 		title: ln.title,
 		width: 910,

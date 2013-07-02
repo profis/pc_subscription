@@ -1,17 +1,21 @@
 <?php
 final class PC_plugin_subscription extends PC_base {
 	public function Subscribe($email, $site=null) {
+		$this->debug("Subscribe($email)");
 		if (empty($site)) $site = $this->site->data['id'];
 		if (!Validate('email', $email)) return false;
-		$r = $this->prepare("INSERT INTO {$this->db_prefix}plugin_pc_subscription (site,email,date,hash,domain) VALUES(?,?,?,?,?)");
-		$s = $r->execute(array($site, $email, time(), md5($email.$this->cfg['salt']), $this->cfg['url']['base']));
+		$query = "INSERT IGNORE INTO {$this->db_prefix}plugin_pc_subscription (site,ln,email,date,hash,domain) VALUES(?,?,?,?,?,?)";
+		$r = $this->prepare($query);
+		$query_params = array($site, $this->site->ln, $email, time(), md5($email.$this->cfg['salt']), $this->cfg['url']['base']);
+		$this->debug_query($query, $query_params, 1);
+		$s = $r->execute($query_params);
 		return $s;
 	}
 	public function Unsubscribe($hash, $site=null) {
 		if (empty($site)) $site = $this->site->data['id'];
 		if (!Validate('md5', $hash)) return false;
-		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and hash=?");
-		$s = $r->execute(array($site, $hash));
+		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and ln=? and hash=?");
+		$s = $r->execute(array($site, $this->site->ln, $hash));
 		return $s;
 	}
 	public function Site_render($params=null) {
@@ -58,7 +62,7 @@ final class PC_plugin_subscription extends PC_base {
 		}
 		$p = array();
 		if (!is_null($pageId)) {
-			$styles = file_get_contents($this->cfg['path']['base'].$this->site->Get_theme_path().'custom.css');
+			$styles = @file_get_contents(CMS_ROOT . $this->site->Get_theme_path().'custom.css');
 			$p = $this->page->Get_page($pageId);
 			if (!$p) {
 				$pageId = null;
@@ -67,6 +71,9 @@ final class PC_plugin_subscription extends PC_base {
 			else $text = $p['text'];
 		}
 		$tpl = $this->core->Get_path('themes').'pc_subscription.tpl.php';
+		if (!is_file($tpl)) {
+			$tpl = $this->core->Get_path('plugins', 'pc_subscription.tpl.php', 'pc_subscription');
+		}
 		if (!is_file($tpl)) {
 			$markup = '<html><head>'
 			.'<style type="text/css">body{background:'.$this->site->data['editor_background'].'}'.(!empty($styles)?$styles:'').'</style>'

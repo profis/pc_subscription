@@ -11,8 +11,10 @@ $newsletterPage = $this->site->Get_data("pc_subscription/page");
 <body style="color: #6C6D6D; font-family: arial; font-size: 14px; height: 100%; line-height: 20px; margin: 0;">
 	<div style="width:100%; height:auto; min-height:100%; background-color:<?php echo $bgcol; ?>; background-image:url(<?php echo $bgimg; ?>); background-repeat:repeat-x; background-position:left top;">
 		<?php
-		echo $newsletterPage['text']);
-		print_pre($newsletterPage);
+		echo $newsletterPage['text'];
+		//print_pre($newsletterPage);
 		?>
+	</div>
+	#unsubscribe:<?php echo $this->core->Get_plugin_variable('subscription_unsubscribe', 'pc_subscription'); ?>#
 </body>
 </html>
