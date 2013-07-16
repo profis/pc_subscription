@@ -234,6 +234,19 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 						$headers  .= 'MIME-Version: 1.0' . "\r\n";
 						$headers .= 'Content-type: text/html; charset=utf-8' . "\r\n";
 						$r_hash = $db->prepare("SELECT hash FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE email=? LIMIT 1");
+						$custom_real_recipients = array();
+						if ($to != 'all') {
+							$model = new PC_plugin_subscription_model();
+							$custom_real_recipients = $model->get_all(array(
+								'where' => array(
+									'email' => $recipients,
+									'site' => $site_id,
+									'ln' => $ln
+								),
+								'key' => 'email',
+							));
+						}
+						
 						foreach ($recipients as $recipient) {
 							if ($to == 'all') {
 								$recip_email = $recipient['email'];
@@ -245,7 +258,15 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 								$unsubscribe_link .= $ln . '/api/plugin/pc_subscription/unsubscribe/'.$recipient['hash'].'/' . $site_id;
 								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_\s]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
 							}
-							else $markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_]+?)#/ui", '$1', $markup);
+							elseif (isset($custom_real_recipients[$recip_email]) and !empty($custom_real_recipients[$recip_email]['hash'])) {
+								$custom_real_recipient = $custom_real_recipients[$recip_email];
+								$unsubscribe_link = (isset($custom_real_recipient['domain'])?$custom_real_recipient['domain']:$cfg['url']['base']);
+								$unsubscribe_link .= $ln . '/api/plugin/pc_subscription/unsubscribe/'.$custom_real_recipient['hash'].'/' . $site_id;
+								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_\s]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
+							}
+							else {
+								$markup2 = preg_replace("/(#unsubscribe:[\pL\pN\-_]+?#)/ui", '', $markup);
+							}
 							PC_utils::debugEmail($recip_email, $markup2);
 							$s = mail($recip_email, $subject, $markup2, $headers);
 							$out['markup'] = $markup;
@@ -360,7 +381,6 @@ function mod_subscription_click() {
 	dialog.ln = ln;
 	
 	dialog.Get_preview_link = function(site, pid, ln) {
-		debugger;
 		if (site == undefined) {
 			if (dialog.window != undefined) {
 				var site_and_ln = dialog.window._f._site._id.getValue();
