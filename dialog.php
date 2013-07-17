@@ -254,13 +254,15 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 							}
 							else $recip_email = $recipient;
 							if (is_array($recipient) && isset($recipient['hash'])) {
-								$unsubscribe_link = (isset($recipient['domain'])?$recipient['domain']:$cfg['url']['base']);
+								//$unsubscribe_link = (isset($recipient['domain'])?$recipient['domain']:$cfg['url']['base']);
+								$unsubscribe_link = $cfg['url']['base'];
 								$unsubscribe_link .= $ln . '/api/plugin/pc_subscription/unsubscribe/'.$recipient['hash'].'/' . $site_id;
 								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_\s]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
 							}
 							elseif (isset($custom_real_recipients[$recip_email]) and !empty($custom_real_recipients[$recip_email]['hash'])) {
 								$custom_real_recipient = $custom_real_recipients[$recip_email];
-								$unsubscribe_link = (isset($custom_real_recipient['domain'])?$custom_real_recipient['domain']:$cfg['url']['base']);
+								//$unsubscribe_link = (isset($custom_real_recipient['domain'])?$custom_real_recipient['domain']:$cfg['url']['base']);
+								$unsubscribe_link = $cfg['url']['base'];
 								$unsubscribe_link .= $ln . '/api/plugin/pc_subscription/unsubscribe/'.$custom_real_recipient['hash'].'/' . $site_id;
 								$markup2 = preg_replace("/#unsubscribe:([\pL\pN\-_\s]+?)#/ui", '<a href="'.$unsubscribe_link.'">$1</a>', $markup);
 							}
