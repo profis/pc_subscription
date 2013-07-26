@@ -39,12 +39,13 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 		case 'delete_subscribers':
 			if (!isset($_GET['action'], $_POST['site'])) break;
 			$site->Load($_POST['site']);
+			$ln = v($_POST['ln']);
 			$emails = v($_POST['emails']);
 			if (!empty($emails)) {
 				$emails = explode(',', $emails);
 				if (count($emails)) {
-					$r = $db->prepare("DELETE FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=? and email in('".implode("','", $emails)."')");
-					$s = $r->execute(array($site->data['id']));
+					$r = $db->prepare("DELETE FROM {$cfg['db']['prefix']}plugin_pc_subscription WHERE site=? and ln=? and email in('".implode("','", $emails)."')");
+					$s = $r->execute(array($site->data['id'], $ln));
 					if ($s) {
 						$out = array('success'=> true);
 						break;
@@ -711,6 +712,7 @@ function mod_subscription_click() {
 															params: {
 																api: true,
 																site: subscribers.grid._site.getValue(),
+																ln: subscribers.store.baseParams.ln,
 																emails: emails.join(',')
 															},
 															callback: function(opts, success, response) {

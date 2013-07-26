@@ -14,7 +14,7 @@ final class PC_plugin_subscription extends PC_base {
 	public function Unsubscribe($hash, $site=null) {
 		if (empty($site)) $site = $this->site->data['id'];
 		if (!Validate('md5', $hash)) return false;
-		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and ln=? and hash=?");
+		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and ln=? and hash=? LIMIT 1");
 		$s = $r->execute(array($site, $this->site->ln, $hash));
 		return $s;
 	}
