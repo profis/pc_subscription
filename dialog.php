@@ -190,6 +190,10 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			$dont_send_json = true;
 			break;
 		case 'send':
+			set_time_limit(300);
+			$logger = new PC_debug();
+			$logger->debug = true;
+			$logger->set_instant_debug_to_file($cfg['path']['logs'] . 'pc_subscription_send.html', null, 20);
 			$subject = v($_POST['subject']);
 			$from = v($_POST['from']);
 			$from_email = v($_POST['from_email']);
@@ -247,8 +251,10 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 								'key' => 'email',
 							));
 						}
-						
+						$logger->debug('Number of recipients: ' . count($recipients), 1);
+						$counter = 0;
 						foreach ($recipients as $recipient) {
+							$counter++;
 							if ($to == 'all') {
 								$recip_email = $recipient['email'];
 								//$markup2 = str_replace("</body>", '<a target="blank" href="'.$recipient['domain'].$sbscr_route.'/'.$recipient['hash'].'/">'.lang('subscription_unsubscribe').'</a></body>', $markup);
@@ -270,8 +276,15 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 							else {
 								$markup2 = preg_replace("/(#unsubscribe:[\pL\pN\-_]+?#)/ui", '', $markup);
 							}
-							PC_utils::debugEmail($recip_email, $markup2);
-							$s = mail($recip_email, $subject, $markup2, $headers);
+							//PC_utils::debugEmail($recip_email, $markup2);
+							$s = PC_utils::sendEmail($recip_email, $markup2, array(
+								'from_email' => $from_email,
+								'from_name' => $from,
+								'subject' => $subject,
+								
+							));
+							//$s = mail($recip_email, $subject, $markup2, $headers);
+							$logger->debug("Sending $counter ...: " . $s, 2);
 							$out['markup'] = $markup;
 							if ($s) $out['success'] = true;
 							unset($markup2);
