@@ -285,6 +285,9 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 							));
 							//$s = mail($recip_email, $subject, $markup2, $headers);
 							$logger->debug("Sending $counter ...: " . $s, 2);
+							if (!$s) {
+								$logger->debug(PC_utils::$last_send_email_error . $s, 3);
+							}
 							$out['markup'] = $markup;
 							if ($s) $out['success'] = true;
 							unset($markup2);
@@ -1003,6 +1006,7 @@ function mod_subscription_click() {
 								});
 								Ext.Ajax.request({
 									url: plugin_file +'?action=send',
+									timeout:300000,
 									params: params,
 									method: 'POST',
 									callback: function(opts, success, rspns) {
