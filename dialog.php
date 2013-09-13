@@ -190,7 +190,7 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			$dont_send_json = true;
 			break;
 		case 'send':
-			set_time_limit(300);
+			set_time_limit(3000);
 			$logger = new PC_debug();
 			$logger->debug = true;
 			$logger->set_instant_debug_to_file($cfg['path']['logs'] . 'pc_subscription_send.html', null, 20);
@@ -255,6 +255,9 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 						$counter = 0;
 						foreach ($recipients as $recipient) {
 							$counter++;
+							if ($counter % 2 == 0) {
+								//sleep (2);
+							}
 							if ($to == 'all') {
 								$recip_email = $recipient['email'];
 								//$markup2 = str_replace("</body>", '<a target="blank" href="'.$recipient['domain'].$sbscr_route.'/'.$recipient['hash'].'/">'.lang('subscription_unsubscribe').'</a></body>', $markup);
