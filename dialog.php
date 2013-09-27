@@ -190,7 +190,7 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			$dont_send_json = true;
 			break;
 		case 'send':
-			set_time_limit(3000);
+			set_time_limit(30000);
 			$logger = new PC_debug();
 			$logger->debug = true;
 			$logger->set_instant_debug_to_file($cfg['path']['logs'] . 'pc_subscription_send.html', null, 20);
@@ -1009,7 +1009,7 @@ function mod_subscription_click() {
 								});
 								Ext.Ajax.request({
 									url: plugin_file +'?action=send',
-									timeout:300000,
+									timeout:3000000,
 									params: params,
 									method: 'POST',
 									callback: function(opts, success, rspns) {
