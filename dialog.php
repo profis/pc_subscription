@@ -279,15 +279,19 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 							else {
 								$markup2 = preg_replace("/(#unsubscribe:[\pL\pN\-_]+?#)/ui", '', $markup);
 							}
-							//PC_utils::debugEmail($recip_email, $markup2);
-							$s = PC_utils::sendEmail($recip_email, $markup2, array(
-								'from_email' => $from_email,
-								'from_name' => $from,
-								'subject' => $subject,
-								
-							));
-							//$s = mail($recip_email, $subject, $markup2, $headers);
-							$logger->debug("Sending $counter ...: " . $s, 2);
+							if (isset($cfg['pc_subscription']) and is_array($cfg['pc_subscription']) and v($cfg['pc_subscription']['use_mail_function'])) {
+								PC_utils::debugEmail($recip_email, $markup2);
+								$s = mail($recip_email, $subject, $markup2, $headers);
+							}
+							else {
+								$s = PC_utils::sendEmail($recip_email, $markup2, array(
+									'from_email' => $from_email,
+									'from_name' => $from,
+									'subject' => $subject,
+
+								));
+								$logger->debug("Sending $counter ...: " . $s, 2);
+							}
 							if (!$s) {
 								$logger->debug(PC_utils::$last_send_email_error . $s, 3);
 							}

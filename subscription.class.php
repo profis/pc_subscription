@@ -52,7 +52,7 @@ final class PC_plugin_subscription extends PC_base {
 		return $m[0];
 	}
 	private function _markup_links_fixer($m) {
-		if (preg_match("#http://#i", $m[2])) return $m[0];
+		if (preg_match("#(https?://|mailto:|skype:)#i", $m[2])) return $m[0];
 		return $m[1]."=\"".$this->cfg['url']['base'].$m[2].'"';
 	}
 	public function Get_markup($pageId=null, $text='', $inline_styles=false) {
