@@ -18,6 +18,12 @@ final class PC_plugin_subscription extends PC_base {
 		$s = $r->execute(array($site, $this->site->ln, $hash));
 		return $s;
 	}
+	public function UnsubscribeEmail($email, $site = null) {
+		if (empty($site)) $site = $this->site->data['id'];
+		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and email=?");
+		$s = $r->execute(array($site, $email));
+		return $s;
+	}
 	public function Site_render($params=null) {
 		if (isset($_POST['pc_subscribe'])) {
 			$r = $this->Subscribe($_POST['pc_subscribe']);
@@ -34,7 +40,13 @@ final class PC_plugin_subscription extends PC_base {
 		if (is_file($custom_tpl)) include($custom_tpl);
 		else include(dirname(__FILE__).'/'.$tpl);
 	}
-	
+
+	public function Is_subscribed($email, $site = null) {
+		if( is_null($site) ) $site = $this->site->data["id"];
+		$r = $this->prepare("SELECT 1 FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? AND email=? LIMIT 1");
+		$r->execute(Array($site, $email));
+		return $r->fetchColumn();
+	}
 	public function Get_subscribers($site=null) {
 		if( is_null($site) ) $site = $this->site->data["id"];
 		$r = $this->prepare("SELECT * FROM {$this->db_prefix}plugin_pc_subscription WHERE site=?");
