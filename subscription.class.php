@@ -4,25 +4,69 @@ final class PC_plugin_subscription extends PC_base {
 		$this->debug("Subscribe($email)");
 		if (empty($site)) $site = $this->site->data['id'];
 		if (!Validate('email', $email)) return false;
+
+		// check if already subscribed
+		$r = $this->prepare("SELECT * FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and ln=? and email=? LIMIT 1");
+		if( !$r->execute(array($site, $this->site->ln, $email)) )
+			return false;
+		$subscriber = $r->fetch();
+		if( $subscriber )
+			return true;
+
 		$query = "INSERT IGNORE INTO {$this->db_prefix}plugin_pc_subscription (site,ln,email,date,hash,domain) VALUES(?,?,?,?,?,?)";
 		$r = $this->prepare($query);
 		$query_params = array($site, $this->site->ln, $email, time(), md5($email.$this->cfg['salt']), $this->cfg['url']['base']);
 		$this->debug_query($query, $query_params, 1);
-		$s = $r->execute($query_params);
-		return $s;
+		if( $r->execute($query_params) ) {
+			$this->core->Init_hooks('pc_subscription.subscribed', array(
+				'email' => $email,
+				'site' => $site,
+				'ln' => $this->site->ln,
+			));
+			return true;
+		}
+		return false;
 	}
 	public function Unsubscribe($hash, $site=null) {
 		if (empty($site)) $site = $this->site->data['id'];
 		if (!Validate('md5', $hash)) return false;
+
+		$r = $this->prepare("SELECT * FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and ln=? and hash=? LIMIT 1");
+		if( !$r->execute(array($site, $this->site->ln, $hash)) )
+			return false;
+		$subscriber = $r->fetch();
+		if( !$subscriber )
+			return true;
+
 		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and ln=? and hash=? LIMIT 1");
-		$s = $r->execute(array($site, $this->site->ln, $hash));
-		return $s;
+		if( $r->execute(array($site, $this->site->ln, $hash)) ) {
+			$this->core->Init_hooks('pc_subscription.unsubscribed', array(
+				'email' => $subscriber['email'],
+				'site' => $subscriber['site'],
+				'ln' => $subscriber['ln'],
+			));
+			return true;
+		}
+		return false;
 	}
 	public function UnsubscribeEmail($email, $site = null) {
 		if (empty($site)) $site = $this->site->data['id'];
+		$r = $this->prepare("SELECT * FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and email=? LIMIT 1");
+		if( !$r->execute(array($site, $email)) )
+			return false;
+		$subscriber = $r->fetch();
+		if( !$subscriber )
+			return true;
 		$r = $this->prepare("DELETE FROM {$this->db_prefix}plugin_pc_subscription WHERE site=? and email=?");
-		$s = $r->execute(array($site, $email));
-		return $s;
+		if( $r->execute(array($site, $email)) ) {
+			$this->core->Init_hooks('pc_subscription.unsubscribed', array(
+				'email' => $subscriber['email'],
+				'site' => $subscriber['site'],
+				'ln' => $subscriber['ln'],
+			));
+			return true;
+		}
+		return false;
 	}
 	public function Site_render($params=null) {
 		if (isset($_POST['pc_subscribe'])) {
