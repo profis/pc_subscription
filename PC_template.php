@@ -1,4 +1,8 @@
 <?php
+/**
+ * @var PC_controller_pc_subscription $this
+ */
+
 echo $this->site->text;
 ?>
 <script type="text/javascript">

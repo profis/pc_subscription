@@ -1,4 +1,8 @@
 <?php
+/**
+ * @var PC_controller_pc_subscription $this
+ */
+
 $newsletterPage = $this->site->Get_data("pc_subscription/page");
 
 $bgcol = '';

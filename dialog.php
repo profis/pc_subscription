@@ -191,9 +191,6 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 			break;
 		case 'send':
 			set_time_limit(30000);
-			$logger = new PC_debug();
-			$logger->debug = true;
-			$logger->set_instant_debug_to_file($cfg['path']['logs'] . 'pc_subscription_send.html', null, 20);
 			$subject = v($_POST['subject']);
 			$from = v($_POST['from']);
 			$from_email = v($_POST['from_email']);
@@ -251,7 +248,6 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 								'key' => 'email',
 							));
 						}
-						$logger->debug('Number of recipients: ' . count($recipients), 1);
 						$counter = 0;
 						foreach ($recipients as $recipient) {
 							$counter++;
@@ -290,10 +286,6 @@ if (isset($_POST['api']) || isset($_GET['ajax'])) {
 									'subject' => $subject,
 
 								));
-								$logger->debug("Sending $counter ...: " . $s, 2);
-							}
-							if (!$s) {
-								$logger->debug(PC_utils::$last_send_email_error . $s, 3);
 							}
 							$out['markup'] = $markup;
 							if ($s) $out['success'] = true;
@@ -782,7 +774,6 @@ function mod_subscription_click() {
 										},
 										afterSelect: function(id, ln){
 									
-											//debugger;
 											subscribers.store._paging.changePage(1);
 											subscribers.store.setBaseParam('site', id);
 											subscribers.store.setBaseParam('ln', ln);

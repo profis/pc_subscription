@@ -1,7 +1,6 @@
 <?php
 final class PC_plugin_subscription extends PC_base {
 	public function Subscribe($email, $site=null) {
-		$this->debug("Subscribe($email)");
 		if (empty($site)) $site = $this->site->data['id'];
 		if (!Validate('email', $email)) return false;
 
@@ -16,7 +15,6 @@ final class PC_plugin_subscription extends PC_base {
 		$query = "INSERT IGNORE INTO {$this->db_prefix}plugin_pc_subscription (site,ln,email,date,hash,domain) VALUES(?,?,?,?,?,?)";
 		$r = $this->prepare($query);
 		$query_params = array($site, $this->site->ln, $email, time(), md5($email.$this->cfg['salt']), $this->cfg['url']['base']);
-		$this->debug_query($query, $query_params, 1);
 		if( $r->execute($query_params) ) {
 			$this->core->Init_hooks('pc_subscription.subscribed', array(
 				'email' => $email,

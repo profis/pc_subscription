@@ -1,3 +1,8 @@
+<?php
+/**
+ * @var PC_controller_pc_subscription $this
+ */
+?>
 <script type="text/javascript">
 $(document).ready(function(){
 	$('#pc_unsubscribe_form a.pc_submit').click(function(ev){
